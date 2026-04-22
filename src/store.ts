@@ -17,6 +17,8 @@ interface AppState {
   addCategory: (cat: Omit<Category, 'id'>) => Promise<void>
   setBudget: (categoryId: number, amount: number) => Promise<void>
   addMember: (name: string, avatar: string) => Promise<void>
+  updateMember: (id: number, name: string, avatar: string) => Promise<void>
+  deleteMember: (id: number) => Promise<void>
   setActiveMember: (id: number | null) => void
   setMonth: (month: string) => void
 }
@@ -86,6 +88,24 @@ export const useStore = create<AppState>((set, get) => ({
     const id = await db.members.add({ name, avatar, createdAt: Date.now() })
     const saved = await db.members.get(id)
     if (saved) set((s) => ({ members: [...s.members, saved] }))
+  },
+
+  updateMember: async (id, name, avatar) => {
+    await db.members.update(id, { name, avatar })
+    set((s) => ({
+      members: s.members.map((m) => m.id === id ? { ...m, name, avatar } : m),
+    }))
+  },
+
+  deleteMember: async (id) => {
+    await db.members.delete(id)
+    set((s) => {
+      const members = s.members.filter((m) => m.id !== id)
+      return {
+        members,
+        activeMemberId: s.activeMemberId === id ? (members[0]?.id ?? null) : s.activeMemberId,
+      }
+    })
   },
 
   setActiveMember: (id) => set({ activeMemberId: id }),

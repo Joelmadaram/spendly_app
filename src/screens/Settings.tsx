@@ -2,28 +2,54 @@
 import { useState } from 'react'
 import { useStore } from '../store'
 import { useRegisterSW } from 'virtual:pwa-register/react'
+import type { FamilyMember } from '../db'
 
 const AVATARS = ['🧑', '👩', '👨', '🧒', '👧', '👦', '🧓', '👴', '👵', '🐶', '🐱', '🦊']
 
 export default function Settings() {
-  const { members, addMember, categories } = useStore()
-  const [name, setName] = useState('')
-  const [avatar, setAvatar] = useState('🧑')
-  const [showForm, setShowForm] = useState(false)
+  const { members, addMember, updateMember, deleteMember, categories } = useStore()
+
+  // "add" form state
+  const [showAdd, setShowAdd]     = useState(false)
+  const [newName, setNewName]     = useState('')
+  const [newAvatar, setNewAvatar] = useState('🧑')
+
+  // which member is being edited
+  const [editingId, setEditingId]       = useState<number | null>(null)
+  const [editName, setEditName]         = useState('')
+  const [editAvatar, setEditAvatar]     = useState('🧑')
 
   const {
     offlineReady: [offlineReady],
-    needRefresh: [needRefresh],
+    needRefresh:  [needRefresh],
     updateServiceWorker,
   } = useRegisterSW()
 
-  async function handleAddMember(e: React.FormEvent) {
+  function startEdit(m: FamilyMember) {
+    setEditingId(m.id!)
+    setEditName(m.name)
+    setEditAvatar(m.avatar)
+  }
+
+  async function saveEdit() {
+    if (!editName.trim() || editingId === null) return
+    await updateMember(editingId, editName.trim(), editAvatar)
+    setEditingId(null)
+  }
+
+  async function handleDelete(id: number) {
+    if (members.length <= 1) return // always keep at least one member
+    await deleteMember(id)
+    if (editingId === id) setEditingId(null)
+  }
+
+  async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) return
-    await addMember(name.trim(), avatar)
-    setName('')
-    setAvatar('🧑')
-    setShowForm(false)
+    if (!newName.trim()) return
+    await addMember(newName.trim(), newAvatar)
+    setNewName('')
+    setNewAvatar('🧑')
+    setShowAdd(false)
   }
 
   const customCats = categories.filter((c) => c.isCustom)
@@ -35,9 +61,7 @@ export default function Settings() {
       {/* PWA status */}
       <div className="bg-slate-800 rounded-2xl p-4">
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-2">App Status</h2>
-        {offlineReady && (
-          <p className="text-emerald-400 text-sm">✅ App ready to work offline</p>
-        )}
+        {offlineReady && <p className="text-emerald-400 text-sm">✅ App ready to work offline</p>}
         {needRefresh && (
           <div className="flex items-center gap-3">
             <p className="text-amber-400 text-sm flex-1">🔄 Update available</p>
@@ -57,50 +81,126 @@ export default function Settings() {
       {/* Family members */}
       <div className="bg-slate-800 rounded-2xl p-4">
         <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-3">Family Members</h2>
+
         <div className="space-y-2 mb-3">
-          {members.map((m) => (
-            <div key={m.id} className="flex items-center gap-3 bg-slate-700 rounded-xl px-3 py-2">
-              <span className="text-2xl">{m.avatar}</span>
-              <span className="text-white font-medium">{m.name}</span>
-            </div>
-          ))}
+          {members.map((m) =>
+            editingId === m.id ? (
+              // ── Inline edit form ──────────────────────────────────────────
+              <div key={m.id} className="bg-slate-700 rounded-2xl p-3 space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={editAvatar}
+                    onChange={(e) => setEditAvatar(e.target.value)}
+                    maxLength={2}
+                    className="w-12 bg-slate-600 text-white rounded-xl text-center text-xl outline-none py-2 shrink-0"
+                  />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveEdit() }}
+                    placeholder="Name"
+                    className="flex-1 bg-slate-600 text-white rounded-xl px-3 py-2 text-sm outline-none"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {AVATARS.map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setEditAvatar(a)}
+                      className={`text-xl p-1 rounded-lg ${editAvatar === a ? 'bg-indigo-600' : 'bg-slate-600'}`}
+                    >
+                      {a}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveEdit}
+                    className="flex-1 bg-indigo-600 text-white py-2 rounded-xl text-sm font-semibold"
+                  >
+                    Save
+                  </button>
+                  {members.length > 1 && (
+                    <button
+                      onClick={() => handleDelete(m.id!)}
+                      className="bg-red-900 text-red-300 px-3 py-2 rounded-xl text-sm"
+                    >
+                      Delete
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="bg-slate-600 text-slate-300 px-3 py-2 rounded-xl text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // ── Member row ────────────────────────────────────────────────
+              <button
+                key={m.id}
+                onClick={() => startEdit(m)}
+                className="w-full flex items-center gap-3 bg-slate-700 rounded-xl px-3 py-2.5 text-left"
+              >
+                <span className="text-2xl">{m.avatar}</span>
+                <span className="text-white font-medium flex-1">{m.name}</span>
+                <span className="text-slate-500 text-xs">Edit</span>
+              </button>
+            )
+          )}
         </div>
 
-        {!showForm ? (
+        {/* Add member */}
+        {!showAdd ? (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => setShowAdd(true)}
             className="w-full border border-dashed border-slate-600 text-slate-400 text-sm py-2.5 rounded-xl"
           >
             + Add family member
           </button>
         ) : (
-          <form onSubmit={handleAddMember} className="space-y-3">
-            <input
-              autoFocus
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Name"
-              className="w-full bg-slate-700 text-white rounded-xl px-3 py-2 text-sm outline-none"
-            />
-            <div>
-              <p className="text-xs text-slate-400 mb-1">Pick an avatar</p>
-              <div className="flex flex-wrap gap-2">
-                {AVATARS.map((a) => (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => setAvatar(a)}
-                    className={`text-2xl p-1 rounded-lg ${avatar === a ? 'bg-indigo-600' : 'bg-slate-700'}`}
-                  >
-                    {a}
-                  </button>
-                ))}
-              </div>
+          <form onSubmit={handleAdd} className="space-y-3 pt-1">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newAvatar}
+                onChange={(e) => setNewAvatar(e.target.value)}
+                maxLength={2}
+                className="w-12 bg-slate-700 text-white rounded-xl text-center text-xl outline-none py-2 shrink-0"
+              />
+              <input
+                autoFocus
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Name"
+                className="flex-1 bg-slate-700 text-white rounded-xl px-3 py-2 text-sm outline-none"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {AVATARS.map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  onClick={() => setNewAvatar(a)}
+                  className={`text-xl p-1 rounded-lg ${newAvatar === a ? 'bg-indigo-600' : 'bg-slate-700'}`}
+                >
+                  {a}
+                </button>
+              ))}
             </div>
             <div className="flex gap-2">
-              <button type="submit" className="flex-1 bg-indigo-600 text-white py-2 rounded-xl text-sm font-semibold">Add</button>
-              <button type="button" onClick={() => setShowForm(false)} className="bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-sm">Cancel</button>
+              <button type="submit" className="flex-1 bg-indigo-600 text-white py-2 rounded-xl text-sm font-semibold">
+                Add
+              </button>
+              <button type="button" onClick={() => setShowAdd(false)} className="bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-sm">
+                Cancel
+              </button>
             </div>
           </form>
         )}

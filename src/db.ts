@@ -65,8 +65,16 @@ class SpendlyDB extends Dexie {
 
 export const db = new SpendlyDB()
 
-// Seed default data on first run
-export async function seedDefaults() {
+// Module-level promise ensures seedDefaults only runs once even under React Strict Mode
+// (which calls effects twice in development, causing a race where both calls see memberCount=0)
+let seedPromise: Promise<void> | null = null
+
+export function seedDefaults(): Promise<void> {
+  if (!seedPromise) seedPromise = _seed()
+  return seedPromise
+}
+
+async function _seed() {
   const memberCount = await db.members.count()
   if (memberCount > 0) return
 
@@ -76,22 +84,22 @@ export async function seedDefaults() {
 
   await db.categories.bulkAdd([
     // Expenses
-    { name: 'Groceries', icon: '🛒', type: 'expense', isCustom: false },
-    { name: 'Dining Out', icon: '🍽️', type: 'expense', isCustom: false },
-    { name: 'Gas', icon: '⛽', type: 'expense', isCustom: false },
-    { name: 'House Rent', icon: '🏠', type: 'expense', isCustom: false },
-    { name: 'Utilities', icon: '💡', type: 'expense', isCustom: false },
-    { name: 'Entertainment', icon: '🎬', type: 'expense', isCustom: false },
-    { name: 'Shopping', icon: '🛍️', type: 'expense', isCustom: false },
-    { name: 'Loan Repayment', icon: '🏦', type: 'expense', isCustom: false },
-    { name: 'Other', icon: '📦', type: 'expense', isCustom: false },
+    { name: 'Groceries',      icon: '🛒', type: 'expense',    isCustom: false },
+    { name: 'Dining Out',     icon: '🍽️', type: 'expense',    isCustom: false },
+    { name: 'Gas',            icon: '⛽', type: 'expense',    isCustom: false },
+    { name: 'House Rent',     icon: '🏠', type: 'expense',    isCustom: false },
+    { name: 'Utilities',      icon: '💡', type: 'expense',    isCustom: false },
+    { name: 'Entertainment',  icon: '🎬', type: 'expense',    isCustom: false },
+    { name: 'Shopping',       icon: '🛍️', type: 'expense',    isCustom: false },
+    { name: 'Loan Repayment', icon: '🏦', type: 'expense',    isCustom: false },
+    { name: 'Other',          icon: '📦', type: 'expense',    isCustom: false },
     // Savings
-    { name: 'Emergency Fund', icon: '🛡️', type: 'savings', isCustom: false },
-    { name: 'Vacation', icon: '✈️', type: 'savings', isCustom: false },
-    { name: 'Education', icon: '🎓', type: 'savings', isCustom: false },
+    { name: 'Emergency Fund', icon: '🛡️', type: 'savings',    isCustom: false },
+    { name: 'Vacation',       icon: '✈️', type: 'savings',    isCustom: false },
+    { name: 'Education',      icon: '🎓', type: 'savings',    isCustom: false },
     // Investments
-    { name: 'Stocks', icon: '📈', type: 'investment', isCustom: false },
-    { name: '401k', icon: '🏛️', type: 'investment', isCustom: false },
-    { name: 'Index Funds', icon: '📊', type: 'investment', isCustom: false },
+    { name: 'Stocks',         icon: '📈', type: 'investment', isCustom: false },
+    { name: '401k',           icon: '🏛️', type: 'investment', isCustom: false },
+    { name: 'Index Funds',    icon: '📊', type: 'investment', isCustom: false },
   ])
 }
