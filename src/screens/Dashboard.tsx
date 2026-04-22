@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useStore } from '../store'
-import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns'
+import { format } from 'date-fns'
 import BudgetBar from '../components/BudgetBar'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -9,20 +9,19 @@ const COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4'
 export default function Dashboard() {
   const { entries, categories, budgets, members, currentMonth, setMonth } = useStore()
 
-  const monthStart = startOfMonth(new Date(currentMonth + '-01'))
-  const monthEnd = endOfMonth(monthStart)
+  // Use local-time constructor — new Date('YYYY-MM-DD') parses as UTC and shifts the month in US time zones
+  const [yr, mo] = currentMonth.split('-').map(Number)
+  const monthStart = new Date(yr, mo - 1, 1)
 
+  // Filter entries by string prefix — avoids all timezone/date-parsing issues
   const monthEntries = useMemo(() =>
-    entries.filter((e) => {
-      const d = parseISO(e.date)
-      return d >= monthStart && d <= monthEnd
-    }),
+    entries.filter((e) => e.date.startsWith(currentMonth)),
     [entries, currentMonth]
   )
 
   const expenseEntries = monthEntries.filter((e) => e.type === 'expense')
   const savingsEntries = monthEntries.filter((e) => e.type === 'savings')
-  const investEntries = monthEntries.filter((e) => e.type === 'investment')
+  const investEntries  = monthEntries.filter((e) => e.type === 'investment')
 
   const expenseCategories = categories.filter((c) => c.type === 'expense')
 
@@ -35,8 +34,8 @@ export default function Dashboard() {
   }, [expenseEntries])
 
   const totalExpenses = Object.values(spendingByCat).reduce((a, b) => a + b, 0)
-  const totalSavings = savingsEntries.reduce((a, e) => a + e.amount, 0)
-  const totalInvest = investEntries.reduce((a, e) => a + e.amount, 0)
+  const totalSavings  = savingsEntries.reduce((a, e) => a + e.amount, 0)
+  const totalInvest   = investEntries.reduce((a, e) => a + e.amount, 0)
 
   const budgetMap = useMemo(() => {
     const map: Record<number, number> = {}
@@ -51,48 +50,49 @@ export default function Dashboard() {
     .filter((d) => d.value > 0)
 
   const prevMonth = () => {
-    const d = new Date(currentMonth + '-01')
-    d.setMonth(d.getMonth() - 1)
+    const d = new Date(yr, mo - 2, 1) // local: mo is 1-based, so mo-2 = previous month (0-based)
     setMonth(format(d, 'yyyy-MM'))
   }
   const nextMonth = () => {
-    const d = new Date(currentMonth + '-01')
-    d.setMonth(d.getMonth() + 1)
+    const d = new Date(yr, mo, 1) // local: mo = current 1-based = next month 0-based
     setMonth(format(d, 'yyyy-MM'))
   }
 
   const isCurrentMonth = currentMonth === format(new Date(), 'yyyy-MM')
 
+  const recentEntries = useMemo(() =>
+    [...monthEntries]
+      .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)
+      .slice(0, 5),
+    [monthEntries]
+  )
+
   return (
     <div className="px-4 pt-4 pb-2">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Spendly 💸</h1>
-          <p className="text-slate-400 text-sm">Family expense tracker</p>
-        </div>
-        {/* Member avatars */}
-        <div className="flex gap-1">
-          {members.map((m) => (
-            <span key={m.id} className="text-2xl" title={m.name}>{m.avatar}</span>
-          ))}
-        </div>
+      {/* Header — no avatars, they cluttered the UI */}
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-white">Spendly 💸</h1>
+        <p className="text-slate-400 text-sm">Family expense tracker</p>
       </div>
 
       {/* Month picker */}
       <div className="flex items-center justify-between bg-slate-800 rounded-2xl px-4 py-3 mb-4">
-        <button onClick={prevMonth} className="text-slate-400 text-xl px-2">‹</button>
+        <button onClick={prevMonth} className="text-slate-400 text-xl px-2 py-1">‹</button>
         <span className="font-semibold text-white">
-          {format(new Date(currentMonth + '-01'), 'MMMM yyyy')}
+          {format(monthStart, 'MMMM yyyy')}
         </span>
-        <button onClick={nextMonth} disabled={isCurrentMonth} className="text-slate-400 text-xl px-2 disabled:opacity-30">›</button>
+        <button
+          onClick={nextMonth}
+          disabled={isCurrentMonth}
+          className="text-slate-400 text-xl px-2 py-1 disabled:opacity-30"
+        >›</button>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3 mb-4">
-        <SummaryCard label="Expenses" value={totalExpenses} color="text-red-400" icon="💸" />
-        <SummaryCard label="Savings" value={totalSavings} color="text-emerald-400" icon="🏦" />
-        <SummaryCard label="Invested" value={totalInvest} color="text-indigo-400" icon="📈" />
+        <SummaryCard label="Expenses" value={totalExpenses} color="text-red-400"     icon="💸" />
+        <SummaryCard label="Savings"  value={totalSavings}  color="text-emerald-400" icon="🏦" />
+        <SummaryCard label="Invested" value={totalInvest}   color="text-indigo-400"  icon="📈" />
       </div>
 
       {/* Pie chart */}
@@ -128,7 +128,7 @@ export default function Dashboard() {
         <h2 className="text-sm font-semibold text-slate-400 mb-3">Budget status</h2>
         <div className="space-y-4">
           {expenseCategories.map((cat) => {
-            const spent = spendingByCat[cat.id!] ?? 0
+            const spent  = spendingByCat[cat.id!] ?? 0
             const budget = budgetMap[cat.id!] ?? 0
             if (spent === 0 && budget === 0) return null
             return (
@@ -142,9 +142,7 @@ export default function Dashboard() {
                 </div>
                 {budget > 0
                   ? <BudgetBar spent={spent} budget={budget} />
-                  : <div className="h-1.5 bg-slate-700 rounded-full mt-1">
-                      <div className="h-full w-0 bg-slate-600 rounded-full" />
-                    </div>
+                  : <div className="h-1.5 bg-slate-700 rounded-full mt-1" />
                 }
               </div>
             )
@@ -156,7 +154,7 @@ export default function Dashboard() {
       </div>
 
       {/* Recent entries */}
-      <RecentEntries entries={monthEntries.slice(-5).reverse()} categories={categories} members={members} />
+      <RecentEntries entries={recentEntries} categories={categories} members={members} />
     </div>
   )
 }
@@ -177,7 +175,7 @@ function RecentEntries({ entries, categories, members }: {
   members: import('../db').FamilyMember[]
 }) {
   if (entries.length === 0) return null
-  const catMap = Object.fromEntries(categories.map((c) => [c.id, c]))
+  const catMap    = Object.fromEntries(categories.map((c) => [c.id, c]))
   const memberMap = Object.fromEntries(members.map((m) => [m.id, m]))
 
   return (
@@ -185,7 +183,7 @@ function RecentEntries({ entries, categories, members }: {
       <h2 className="text-sm font-semibold text-slate-400 mb-3">Recent entries</h2>
       <div className="space-y-3">
         {entries.map((e) => {
-          const cat = catMap[e.categoryId]
+          const cat    = catMap[e.categoryId]
           const member = memberMap[e.memberId]
           return (
             <div key={e.id} className="flex items-center gap-3">
@@ -194,7 +192,9 @@ function RecentEntries({ entries, categories, members }: {
                 <p className="text-sm font-medium text-white truncate">{cat?.name}</p>
                 <p className="text-xs text-slate-400 truncate">{e.note || member?.name} · {e.date}</p>
               </div>
-              <span className={`text-sm font-semibold ${e.type === 'expense' ? 'text-red-400' : e.type === 'savings' ? 'text-emerald-400' : 'text-indigo-400'}`}>
+              <span className={`text-sm font-semibold ${
+                e.type === 'expense' ? 'text-red-400' : e.type === 'savings' ? 'text-emerald-400' : 'text-indigo-400'
+              }`}>
                 ${e.amount.toFixed(2)}
               </span>
             </div>

@@ -1,21 +1,17 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useStore } from '../store'
 import BudgetBar from '../components/BudgetBar'
-import { startOfMonth, endOfMonth, parseISO } from 'date-fns'
-import { useMemo } from 'react'
 
 export default function Budgets() {
   const { categories, budgets, entries, currentMonth, setBudget, addCategory } = useStore()
 
   const expenseCats = categories.filter((c) => c.type === 'expense')
 
-  const monthStart = startOfMonth(new Date(currentMonth + '-01'))
-  const monthEnd = endOfMonth(monthStart)
-
+  // String-prefix filter — avoids all timezone issues with date parsing
   const spendingByCat = useMemo(() => {
     const map: Record<number, number> = {}
     entries
-      .filter((e) => e.type === 'expense' && parseISO(e.date) >= monthStart && parseISO(e.date) <= monthEnd)
+      .filter((e) => e.type === 'expense' && e.date.startsWith(currentMonth))
       .forEach((e) => { map[e.categoryId] = (map[e.categoryId] ?? 0) + e.amount })
     return map
   }, [entries, currentMonth])
@@ -26,8 +22,8 @@ export default function Budgets() {
     return map
   }, [budgets, currentMonth])
 
-  const [editing, setEditing] = useState<number | null>(null)
-  const [value, setValue] = useState('')
+  const [editing, setEditing]     = useState<number | null>(null)
+  const [value, setValue]         = useState('')
   const [showAddCat, setShowAddCat] = useState(false)
   const [newCatName, setNewCatName] = useState('')
   const [newCatIcon, setNewCatIcon] = useState('📦')
@@ -55,7 +51,7 @@ export default function Budgets() {
 
       <div className="space-y-3">
         {expenseCats.map((cat) => {
-          const spent = spendingByCat[cat.id!] ?? 0
+          const spent  = spendingByCat[cat.id!] ?? 0
           const budget = budgetMap[cat.id!] ?? 0
           return (
             <div key={cat.id} className="bg-slate-800 rounded-2xl p-4">

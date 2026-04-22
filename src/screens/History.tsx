@@ -1,28 +1,29 @@
 import { useMemo, useState } from 'react'
 import { useStore } from '../store'
-import { parseISO, format, startOfMonth, endOfMonth } from 'date-fns'
+import { format } from 'date-fns'
 import type { EntryType } from '../db'
+
+// Parse 'YYYY-MM-DD' as local midnight — avoids UTC shift from new Date(string)
+function localDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
 
 export default function History() {
   const { entries, categories, members, currentMonth, deleteEntry } = useStore()
   const [filterType, setFilterType] = useState<EntryType | 'all'>('all')
 
-  const catMap = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories])
+  const catMap    = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c])), [categories])
   const memberMap = useMemo(() => Object.fromEntries(members.map((m) => [m.id, m])), [members])
 
-  const monthStart = startOfMonth(new Date(currentMonth + '-01'))
-  const monthEnd = endOfMonth(monthStart)
-
+  // String-prefix filter — no date parsing, immune to timezone issues
   const filtered = useMemo(() => {
     return entries
-      .filter((e) => {
-        const d = parseISO(e.date)
-        return d >= monthStart && d <= monthEnd && (filterType === 'all' || e.type === filterType)
-      })
+      .filter((e) => e.date.startsWith(currentMonth) && (filterType === 'all' || e.type === filterType))
       .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)
   }, [entries, currentMonth, filterType])
 
-  // Group by date
+  // Group by date string
   const grouped = useMemo(() => {
     const map = new Map<string, typeof filtered>()
     filtered.forEach((e) => {
@@ -67,11 +68,11 @@ export default function History() {
         {grouped.map(([date, dayEntries]) => (
           <div key={date}>
             <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide mb-2">
-              {format(parseISO(date), 'EEEE, MMM d')}
+              {format(localDate(date), 'EEEE, MMM d')}
             </p>
             <div className="space-y-2">
               {dayEntries.map((e) => {
-                const cat = catMap[e.categoryId]
+                const cat    = catMap[e.categoryId]
                 const member = memberMap[e.memberId]
                 return (
                   <div key={e.id} className="bg-slate-800 rounded-2xl px-4 py-3 flex items-center gap-3">
